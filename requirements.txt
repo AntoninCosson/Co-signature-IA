@@ -1,0 +1,8 @@
+# requirements.txt
+spacy
+scikit-learn
+matplotlib
+pandas
+numpy
+umap-learn
+networkx
