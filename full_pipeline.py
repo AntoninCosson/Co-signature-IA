@@ -1,51 +1,67 @@
 import os
-import numpy as np
 import pandas as pd
 from utils.text_loader import load_txt_files
-from utils.analysis import compute_shannon_entropy, compute_tfidf_top_terms, compute_average_syntax_depth
 from utils.reflexive_score import compute_reflexive_score
-from utils.reflexive_graph import extract_concepts, build_reflexive_graph, compute_coherence_score, embed_narrative, plot_tsne
+from utils.reflexive_graph import extract_concepts, build_reflexive_graph, compute_coherence_score
+from utils.narrative_style import narrative_score
+from utils.semantic_density import compute_semantic_density
+from utils.gpt_shift import simulate_gpt_response, cosine_distance
 
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
 
-if __name__ == "__main__":
-    folder = "data/"
-    texts = load_txt_files(folder)
+# Chargement des textes
+corpus_dir = "data"
+fichiers = load_txt_files(corpus_dir)
 
-    rows = []
-    embeddings = []
-    labels = []
+results = []
 
-    for fname, content in texts.items():
-        print(f"\nTraitement de : {fname}")
+for nom, texte in fichiers.items():
+    print(f"\nTraitement de : {nom}")
 
-        entropy = compute_shannon_entropy(content)
-        tfidf = compute_tfidf_top_terms({fname: content})[fname][:3]  # top 3 termes
-        depth = compute_average_syntax_depth(content)
-        reflexive_score, _ = compute_reflexive_score(content)
+    reflexive_score, _ = compute_reflexive_score(texte)
+    concepts = extract_concepts(texte)
+    G = build_reflexive_graph(concepts)
+    coherence_score = compute_coherence_score(G)
+    narrative, _ = narrative_score(texte)
+    semantic_density = compute_semantic_density(texte)
 
-        concepts = extract_concepts(content)
-        G = build_reflexive_graph(concepts)
-        coherence = compute_coherence_score(G)
-        embedding = embed_narrative(G)
+    # GPT shift simulation
+    question = "Quel est le rôle de la pensée dans la prise de décision ?"
+    reponse_avant = simulate_gpt_response(question)
+    reponse_apres = simulate_gpt_response(question + "\n\n" + texte)
+    shift = cosine_distance(reponse_avant, reponse_apres)
 
-        rows.append({
-            "fichier": fname,
-            "entropie": entropy,
-            "tfidf_1": tfidf[0][0] if tfidf else "",
-            "tfidf_2": tfidf[1][0] if len(tfidf) > 1 else "",
-            "tfidf_3": tfidf[2][0] if len(tfidf) > 2 else "",
-            "syntaxe": depth,
-            "reflexivite": reflexive_score,
-            "coherence": coherence
-        })
+    results.append({
+        "fichier": nom,
+        "reflexivite": reflexive_score,
+        "coherence": coherence_score,
+        "narrative": narrative,
+        "semantic_density": semantic_density,
+        "delta_vectoriel": shift
+    })
 
-        embeddings.append(embedding)
-        labels.append(fname)
+# Export CSV
+df = pd.DataFrame(results)
+os.makedirs("results", exist_ok=True)
+df.to_csv("results/rapport_scores.csv", index=False)
+print("\n✅ Export CSV : results/rapport_scores.csv")
 
-    df = pd.DataFrame(rows)
-    df.to_csv("rapport_scores.csv", index=False)
-    print("\nExport CSV : rapport_scores.csv")
+# Projection t-SNE
+embeddings = df[["reflexivite", "coherence", "semantic_density", "delta_vectoriel", "narrative"]].values
+labels = df["fichier"].values
 
-    if embeddings:
-        print("\nProjection t-SNE...")
-        plot_tsne(np.array(embeddings), labels)
+tsne = TSNE(n_components=2, perplexity=5, random_state=42)
+reduced = tsne.fit_transform(embeddings)
+
+plt.figure(figsize=(10, 7))
+plt.title("Carte des styles de pensée réflexive")
+colors = plt.cm.tab10.colors
+
+for i, label in enumerate(labels):
+    plt.scatter(reduced[i, 0], reduced[i, 1], color=colors[i % len(colors)])
+    plt.text(reduced[i, 0]+5, reduced[i, 1], label, fontsize=8)
+
+plt.tight_layout()
+plt.savefig("results/projection_reflexive_tsne.png")
+print("\n✅ Graphique exporté : results/projection_reflexive_tsne.png")
