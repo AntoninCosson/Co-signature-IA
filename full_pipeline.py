@@ -51,7 +51,8 @@ print("\n✅ Export CSV : results/rapport_scores.csv")
 embeddings = df[["reflexivite", "coherence", "semantic_density", "delta_vectoriel", "narrative"]].values
 labels = df["fichier"].values
 
-tsne = TSNE(n_components=2, perplexity=5, random_state=42)
+perplexity = min(3, len(embeddings) - 1)
+tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42)
 reduced = tsne.fit_transform(embeddings)
 
 plt.figure(figsize=(10, 7))
